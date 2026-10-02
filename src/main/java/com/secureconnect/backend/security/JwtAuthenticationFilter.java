@@ -4,6 +4,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -28,7 +29,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
 
         String authHeader = request.getHeader("Authorization");
-
+        System.out.println("Authorization header received: " + (authHeader != null));
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
@@ -50,7 +51,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     .setAuthentication(authentication);
 
         } catch (Exception e) {
-            // Invalid or expired JWT
+            System.out.println("JWT validation failed: "
+                    + e.getClass().getSimpleName()
+                    + " - "
+                    + e.getMessage());
         }
 
         filterChain.doFilter(request, response);

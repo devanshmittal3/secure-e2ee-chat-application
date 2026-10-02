@@ -10,4 +10,9 @@ public class HelloController {
     public String hello() {
         return "SecureConnect Backend is running!";
     }
+
+    @GetMapping("/api/protected")
+    public String protectedEndpoint() {
+        return "You are authenticated!";
+    }
 }
