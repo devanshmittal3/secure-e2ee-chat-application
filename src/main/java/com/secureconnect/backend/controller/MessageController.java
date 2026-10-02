@@ -4,6 +4,8 @@ import com.secureconnect.backend.model.Message;
 import com.secureconnect.backend.service.MessageService;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/messages")
 public class MessageController {
@@ -25,5 +27,12 @@ public class MessageController {
                 senderId,
                 content
         );
+    }
+
+    @GetMapping("/conversation/{conversationId}")
+    public List<Message> getMessagesByConversation(
+            @PathVariable Long conversationId
+    ) {
+        return messageService.getMessagesByConversation(conversationId);
     }
 }

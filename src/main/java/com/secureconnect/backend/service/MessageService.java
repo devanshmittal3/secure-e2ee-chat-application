@@ -9,6 +9,7 @@ import com.secureconnect.backend.repository.UserRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 public class MessageService {
@@ -51,5 +52,11 @@ public class MessageService {
         );
 
         return messageRepository.save(message);
+    }
+
+    public List<Message> getMessagesByConversation(Long conversationId) {
+
+        return messageRepository
+                .findByConversationIdOrderByCreatedAtAsc(conversationId);
     }
 }
