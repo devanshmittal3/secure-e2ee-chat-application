@@ -1,5 +1,6 @@
 package com.secureconnect.backend.service;
 
+import com.secureconnect.backend.dto.MessageResponse;
 import com.secureconnect.backend.model.Conversation;
 import com.secureconnect.backend.model.Message;
 import com.secureconnect.backend.model.User;
@@ -54,9 +55,24 @@ public class MessageService {
         return messageRepository.save(message);
     }
 
-    public List<Message> getMessagesByConversation(Long conversationId) {
+    public List<MessageResponse> getMessagesByConversation(
+            Long conversationId
+    ) {
 
-        return messageRepository
-                .findByConversationIdOrderByCreatedAtAsc(conversationId);
+        List<Message> messages =
+                messageRepository
+                        .findByConversationIdOrderByCreatedAtAsc(
+                                conversationId
+                        );
+
+        return messages.stream()
+                .map(message -> new MessageResponse(
+                        message.getId(),
+                        message.getSender().getId(),
+                        message.getSender().getUsername(),
+                        message.getContent(),
+                        message.getCreatedAt()
+                ))
+                .toList();
     }
 }

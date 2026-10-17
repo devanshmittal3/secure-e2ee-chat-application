@@ -1,5 +1,7 @@
+
 package com.secureconnect.backend.controller;
 
+import com.secureconnect.backend.dto.MessageResponse;
 import com.secureconnect.backend.model.Message;
 import com.secureconnect.backend.service.MessageService;
 import org.springframework.web.bind.annotation.*;
@@ -30,7 +32,7 @@ public class MessageController {
     }
 
     @GetMapping("/conversation/{conversationId}")
-    public List<Message> getMessagesByConversation(
+    public List<MessageResponse> getMessagesByConversation(
             @PathVariable Long conversationId
     ) {
         return messageService.getMessagesByConversation(conversationId);
