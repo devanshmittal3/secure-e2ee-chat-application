@@ -2,8 +2,8 @@
 package com.secureconnect.backend.controller;
 
 import com.secureconnect.backend.dto.MessageResponse;
-import com.secureconnect.backend.model.Message;
 import com.secureconnect.backend.service.MessageService;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -19,22 +19,26 @@ public class MessageController {
     }
 
     @PostMapping
-    public Message sendMessage(
+    public MessageResponse sendMessage(
             @RequestParam Long conversationId,
-            @RequestParam Long senderId,
-            @RequestParam String content
+            @RequestParam String content,
+            Authentication authentication
     ) {
         return messageService.sendMessage(
                 conversationId,
-                senderId,
+                authentication.getName(),
                 content
         );
     }
 
     @GetMapping("/conversation/{conversationId}")
     public List<MessageResponse> getMessagesByConversation(
-            @PathVariable Long conversationId
+            @PathVariable Long conversationId,
+            Authentication authentication
     ) {
-        return messageService.getMessagesByConversation(conversationId);
+        return messageService.getMessagesByConversation(
+                conversationId,
+                authentication.getName()
+        );
     }
 }
