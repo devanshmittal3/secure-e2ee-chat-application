@@ -1,16 +1,20 @@
+
 package com.secureconnect.backend.controller;
 
-import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
 import com.secureconnect.backend.dto.AuthResponse;
 import com.secureconnect.backend.dto.LoginRequest;
 import com.secureconnect.backend.dto.LoginResponse;
 import com.secureconnect.backend.dto.RegisterRequest;
 import com.secureconnect.backend.model.User;
 import com.secureconnect.backend.security.JwtService;
+import com.secureconnect.backend.service.SessionService;
 import com.secureconnect.backend.service.UserService;
+
+import jakarta.validation.Valid;
+
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Optional;
 
@@ -20,21 +24,29 @@ public class AuthController {
 
     private final UserService userService;
     private final JwtService jwtService;
+    private final SessionService sessionService;
 
-    public AuthController(UserService userService, JwtService jwtService) {
+    public AuthController(
+            UserService userService,
+            JwtService jwtService,
+            SessionService sessionService
+    ) {
         this.userService = userService;
         this.jwtService = jwtService;
+        this.sessionService = sessionService;
     }
 
     @PostMapping("/register")
-    public AuthResponse register(@Valid @RequestBody RegisterRequest request) {
+    public AuthResponse register(
+            @Valid @RequestBody RegisterRequest request
+    ) {
 
         if (userService.emailExists(request.getEmail())) {
-        throw new ResponseStatusException(
-                HttpStatus.CONFLICT,
-                "Email already registered"
-        );
-    }
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Email already registered"
+            );
+        }
 
         User user = new User();
         user.setUsername(request.getUsername());
@@ -51,7 +63,13 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public LoginResponse login(@RequestBody LoginRequest request) {
+    public LoginResponse login(
+            @RequestBody LoginRequest request,
+            @RequestHeader(
+                    value = "X-Device-Name",
+                    required = false
+            ) String deviceName
+    ) {
 
         Optional<User> userOptional =
                 userService.authenticate(
@@ -60,21 +78,41 @@ public class AuthController {
                 );
 
         if (userOptional.isEmpty()) {
-        throw new ResponseStatusException(
-                HttpStatus.UNAUTHORIZED,
-                "Invalid email or password"
-        );
-    }
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Invalid email or password"
+            );
+        }
 
         User user = userOptional.get();
 
-        String token = jwtService.generateToken(user.getEmail());
+        String finalDeviceName =
+                (deviceName == null || deviceName.isBlank())
+                        ? "Android device"
+                        : deviceName.trim();
+
+        // Create the primary device session.
+        SessionService.IssuedSession session =
+                sessionService.createPrimarySession(
+                        user,
+                        finalDeviceName
+                );
+
+        // Generate a JWT containing the session UUID.
+        String token = jwtService.generateToken(
+                user.getEmail(),
+                user.getId(),
+                session.sessionId()
+        );
 
         return new LoginResponse(
                 user.getId(),
                 user.getUsername(),
                 user.getEmail(),
-                token
+                token,
+                session.sessionId(),
+                session.refreshToken(),
+                session.status().name()
         );
     }
 }

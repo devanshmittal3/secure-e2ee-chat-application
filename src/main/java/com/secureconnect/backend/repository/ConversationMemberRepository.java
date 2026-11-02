@@ -15,4 +15,9 @@ public interface ConversationMemberRepository
     );
 
     List<ConversationMember> findByUserId(Long userId);
+
+    List<ConversationMember> findByUserIdAndConversationId(
+            Long userId,
+            Long conversationId
+    );
 }
