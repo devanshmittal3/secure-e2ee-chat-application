@@ -3,7 +3,7 @@ package com.secureconnect.backend.dto;
 import java.time.LocalDateTime;
 
 public record ConversationSummaryResponse(
-        Long id,
+        Long conversationId,
         Long otherUserId,
         String otherUsername,
         String lastMessage,
