@@ -17,7 +17,7 @@ import {
 
 // Local-development address. Keep the phone and laptop on the same Wi-Fi.
 // Update this IP if your laptop's Wi-Fi address changes.
-const API_BASE_URL = "http://192.168.29.230:8080"; // Replace with your backend's IP address and port
+const API_BASE_URL = "https://secure-e2ee-chat-application.onrender.com"; // Replace with your backend's IP address and port
 
 const STORAGE_KEYS = {
   accessToken: 'secureconnect.accessToken',
@@ -78,7 +78,7 @@ type Conversation = {
 };
 
 type ConversationSummary = {
-  id: number;
+  conversationId: number;
   otherUserId: number;
   otherUsername: string;
   lastMessage?: string | null;
@@ -782,14 +782,14 @@ export default function App() {
     if (!token || chatLoading) return;
     setChatLoading(true);
     setSelectedUser({ id: summary.otherUserId, username: summary.otherUsername });
-    setActiveConversation({ id: summary.id, createdAt: summary.createdAt });
+    setActiveConversation({ id: summary.conversationId, createdAt: summary.createdAt });
     setMessages([]);
     setMessageText('');
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/messages/conversation/${summary.id}`,
-        { method: 'GET', headers: apiHeaders(token) },
-      );
+  `${API_BASE_URL}/api/messages/conversation/${summary.conversationId}`,
+  { method: 'GET', headers: apiHeaders(token) },
+);
       const data = await readResponse<Message[]>(response);
       const loadedMessages = Array.isArray(data) ? data : [];
       setMessages(loadedMessages);
@@ -1141,7 +1141,7 @@ export default function App() {
                 <ScrollView contentContainerStyle={styles.userList} keyboardShouldPersistTaps="handled">
                   {filteredConversations.map((conversation) => (
                     <Pressable
-                      key={conversation.id}
+                      key={conversation.conversationId}
                       style={({ pressed }) => [styles.userRow, pressed && styles.userRowPressed]}
                       onPress={() => void openExistingConversation(conversation)}
                       disabled={chatLoading}
