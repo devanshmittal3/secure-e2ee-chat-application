@@ -3,6 +3,7 @@ package com.secureconnect.backend.service;
 
 import com.secureconnect.backend.dto.MessageResponse;
 import com.secureconnect.backend.model.Conversation;
+import com.secureconnect.backend.model.ConversationMember;
 import com.secureconnect.backend.model.Message;
 import com.secureconnect.backend.model.User;
 import com.secureconnect.backend.repository.ConversationMemberRepository;
@@ -104,19 +105,21 @@ public class MessageService {
             );
         }
 
-        boolean isMember =
+        ConversationMember membership =
                 conversationMemberRepository
-                        .existsByConversationIdAndUserId(
-                                conversationId,
-                                user.getId()
-                        );
+                        .findByUserIdAndConversationId(
+                                user.getId(),
+                                conversationId
+                        )
+                        .stream()
+                        .findFirst()
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.FORBIDDEN,
+                                "You are not a member of this conversation"
+                        ));
 
-        if (!isMember) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "You are not a member of this conversation"
-            );
-        }
+        LocalDateTime historyClearedAt =
+                membership.getHistoryClearedAt();
 
         List<Message> messages =
                 messageRepository
@@ -125,6 +128,11 @@ public class MessageService {
                         );
 
         return messages.stream()
+                .filter(message ->
+                        historyClearedAt == null
+                                || (message.getCreatedAt() != null
+                                && message.getCreatedAt().isAfter(historyClearedAt))
+                )
                 .map(this::toResponse)
                 .toList();
     }
