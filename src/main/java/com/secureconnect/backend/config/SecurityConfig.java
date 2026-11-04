@@ -60,12 +60,13 @@ public class SecurityConfig {
                     DispatcherType.ERROR
                 ).permitAll()
 
-                // Existing public endpoints.
-                .requestMatchers(
-                    "/api/hello",
-                    "/api/auth/register",
-                    "/api/auth/login"
-                ).permitAll()
+// Existing public endpoints.
+.requestMatchers(
+        "/",
+        "/api/hello",
+        "/api/auth/register",
+        "/api/auth/login"
+).permitAll()
 
                 // Phone B can create a pairing request.
                 .requestMatchers(
