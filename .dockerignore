@@ -1,0 +1,15 @@
+.git
+.github
+.claude
+target
+mobile
+node_modules
+.expo
+.env
+.env.*
+*.dump
+*.sql
+*.apk
+*.aab
+*.keystore
+*.jks

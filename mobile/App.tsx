@@ -17,7 +17,7 @@ import {
 
 // Local-development address. Keep the phone and laptop on the same Wi-Fi.
 // Update this IP if your laptop's Wi-Fi address changes.
-const API_BASE_URL = 'http://192.168.29.230:8080';
+const API_BASE_URL = "http://192.168.29.230:8080"; // Replace with your backend's IP address and port
 
 const STORAGE_KEYS = {
   accessToken: 'secureconnect.accessToken',
@@ -74,6 +74,15 @@ type User = {
 
 type Conversation = {
   id: number;
+  createdAt?: string;
+};
+
+type ConversationSummary = {
+  id: number;
+  otherUserId: number;
+  otherUsername: string;
+  lastMessage?: string | null;
+  lastMessageAt?: string | null;
   createdAt?: string;
 };
 
@@ -143,6 +152,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<HomeTab>('chats');
   const [users, setUsers] = useState<User[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [conversationsLoading, setConversationsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [lastMessageByUser, setLastMessageByUser] = useState<
     Record<number, LastMessagePreview>
@@ -214,6 +225,27 @@ export default function App() {
       );
     } finally {
       setUsersLoading(false);
+    }
+  };
+
+  const loadConversations = async (jwt: string, showError = true) => {
+    setConversationsLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/conversations`, {
+        method: 'GET',
+        headers: apiHeaders(jwt),
+      });
+      const data = await readResponse<ConversationSummary[]>(response);
+      setConversations(Array.isArray(data) ? data : []);
+    } catch (error) {
+      if (showError) {
+        Alert.alert(
+          'Could not load chats',
+          error instanceof Error ? error.message : 'Please try again.',
+        );
+      }
+    } finally {
+      setConversationsLoading(false);
     }
   };
 
@@ -331,6 +363,7 @@ export default function App() {
   useEffect(() => {
     if (token && loggedInUser) {
       void loadUsers(token);
+      void loadConversations(token, false);
       void loadDeviceSessions(token);
     }
     // Fetch contacts and linked devices after login.
@@ -616,6 +649,7 @@ export default function App() {
       );
       const conversation = await readResponse<Conversation>(response);
       setActiveConversation(conversation);
+      void loadConversations(token, false);
 
       const messagesResponse = await fetch(
         `${API_BASE_URL}/api/messages/conversation/${conversation.id}`,
@@ -682,6 +716,7 @@ export default function App() {
         },
       }));
       setMessageText('');
+      void loadConversations(token, false);
     } catch (error) {
       Alert.alert(
         'Message not sent',
@@ -722,6 +757,7 @@ export default function App() {
     setUsername('');
     setIsRegister(false);
     setUsers([]);
+    setConversations([]);
     setDeviceSessions([]);
     setSelectedUser(null);
     setActiveConversation(null);
@@ -735,6 +771,39 @@ export default function App() {
   const filteredUsers = users.filter((person) =>
     person.username.toLowerCase().includes(searchQuery.trim().toLowerCase()),
   );
+
+  const filteredConversations = conversations.filter((conversation) =>
+    conversation.otherUsername
+      .toLowerCase()
+      .includes(searchQuery.trim().toLowerCase()),
+  );
+
+  const openExistingConversation = async (summary: ConversationSummary) => {
+    if (!token || chatLoading) return;
+    setChatLoading(true);
+    setSelectedUser({ id: summary.otherUserId, username: summary.otherUsername });
+    setActiveConversation({ id: summary.id, createdAt: summary.createdAt });
+    setMessages([]);
+    setMessageText('');
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/messages/conversation/${summary.id}`,
+        { method: 'GET', headers: apiHeaders(token) },
+      );
+      const data = await readResponse<Message[]>(response);
+      const loadedMessages = Array.isArray(data) ? data : [];
+      setMessages(loadedMessages);
+    } catch (error) {
+      setSelectedUser(null);
+      setActiveConversation(null);
+      Alert.alert(
+        'Could not open chat',
+        error instanceof Error ? error.message : 'Please try again.',
+      );
+    } finally {
+      setChatLoading(false);
+    }
+  };
 
   if (restoringSession) {
     return (
@@ -1037,69 +1106,113 @@ export default function App() {
                 </Text>
               </View>
               <Pressable
-                onPress={() => token && void loadUsers(token)}
+                onPress={() => {
+                  if (!token) return;
+                  if (activeTab === 'chats') void loadConversations(token);
+                  else void loadUsers(token);
+                }}
                 style={styles.refreshSmallButton}
-                disabled={usersLoading}
+                disabled={activeTab === 'chats' ? conversationsLoading : usersLoading}
               >
                 <Text style={styles.refreshSmallButtonText}>
-                  {usersLoading ? '…' : 'Refresh'}
+                  {(activeTab === 'chats' ? conversationsLoading : usersLoading) ? '…' : 'Refresh'}
                 </Text>
               </Pressable>
             </View>
 
-            {usersLoading && users.length === 0 ? (
-              <View style={styles.homeLoading}>
-                <ActivityIndicator color="#128C7E" size="large" />
-                <Text style={styles.emptyMessageText}>Loading people...</Text>
-              </View>
-            ) : filteredUsers.length === 0 ? (
-              <View style={styles.emptyPeople}>
-                <Text style={styles.emptyPeopleTitle}>
-                  {users.length === 0 ? 'No other people yet' : 'No matching people'}
-                </Text>
-                <Text style={styles.emptyMessageText}>
-                  {users.length === 0
-                    ? 'Create another test account to try messaging between two users.'
-                    : 'Try searching with a different name.'}
-                </Text>
-              </View>
-            ) : (
-              <ScrollView
-                contentContainerStyle={styles.userList}
-                keyboardShouldPersistTaps="handled"
-              >
-                {filteredUsers.map((person) => {
-                  const preview = lastMessageByUser[person.id];
-                  return (
+            {activeTab === 'chats' ? (
+              conversationsLoading && conversations.length === 0 ? (
+                <View style={styles.homeLoading}>
+                  <ActivityIndicator color="#128C7E" size="large" />
+                  <Text style={styles.emptyMessageText}>Loading chats...</Text>
+                </View>
+              ) : filteredConversations.length === 0 ? (
+                <View style={styles.emptyPeople}>
+                  <Text style={styles.emptyPeopleTitle}>
+                    {conversations.length === 0 ? 'No chats yet' : 'No matching chats'}
+                  </Text>
+                  <Text style={styles.emptyMessageText}>
+                    {conversations.length === 0
+                      ? 'Start a conversation from the Contacts tab. Your conversations will appear here.'
+                      : 'Try searching with a different name.'}
+                  </Text>
+                </View>
+              ) : (
+                <ScrollView contentContainerStyle={styles.userList} keyboardShouldPersistTaps="handled">
+                  {filteredConversations.map((conversation) => (
                     <Pressable
-                      key={person.id}
-                      style={({ pressed }) => [
-                        styles.userRow,
-                        pressed && styles.userRowPressed,
-                      ]}
-                      onPress={() => void startConversation(person)}
+                      key={conversation.id}
+                      style={({ pressed }) => [styles.userRow, pressed && styles.userRowPressed]}
+                      onPress={() => void openExistingConversation(conversation)}
                       disabled={chatLoading}
                     >
                       <View style={styles.personAvatar}>
                         <Text style={styles.personAvatarText}>
-                          {initials(person.username)}
+                          {initials(conversation.otherUsername)}
                         </Text>
                       </View>
                       <View style={styles.personTextBlock}>
                         <View style={styles.personNameLine}>
-                          <Text style={styles.personName}>{person.username}</Text>
+                          <Text style={styles.personName}>{conversation.otherUsername}</Text>
                           <Text style={styles.previewTime}>
-                            {preview ? formatTime(preview.createdAt) : ''}
+                            {formatTime(conversation.lastMessageAt || conversation.createdAt)}
                           </Text>
                         </View>
                         <Text style={styles.personPreview} numberOfLines={1}>
-                          {preview ? preview.content : 'Tap to start chatting'}
+                          {conversation.lastMessage || 'No messages yet'}
                         </Text>
                       </View>
                     </Pressable>
-                  );
-                })}
-              </ScrollView>
+                  ))}
+                </ScrollView>
+              )
+            ) : (
+              usersLoading && users.length === 0 ? (
+                <View style={styles.homeLoading}>
+                  <ActivityIndicator color="#128C7E" size="large" />
+                  <Text style={styles.emptyMessageText}>Loading people...</Text>
+                </View>
+              ) : filteredUsers.length === 0 ? (
+                <View style={styles.emptyPeople}>
+                  <Text style={styles.emptyPeopleTitle}>
+                    {users.length === 0 ? 'No other people yet' : 'No matching people'}
+                  </Text>
+                  <Text style={styles.emptyMessageText}>
+                    {users.length === 0
+                      ? 'Create another test account to try messaging between two users.'
+                      : 'Try searching with a different name.'}
+                  </Text>
+                </View>
+              ) : (
+                <ScrollView contentContainerStyle={styles.userList} keyboardShouldPersistTaps="handled">
+                  {filteredUsers.map((person) => {
+                    const preview = lastMessageByUser[person.id];
+                    return (
+                      <Pressable
+                        key={person.id}
+                        style={({ pressed }) => [styles.userRow, pressed && styles.userRowPressed]}
+                        onPress={() => void startConversation(person)}
+                        disabled={chatLoading}
+                      >
+                        <View style={styles.personAvatar}>
+                          <Text style={styles.personAvatarText}>{initials(person.username)}</Text>
+                        </View>
+                        <View style={styles.personTextBlock}>
+                          <View style={styles.personNameLine}>
+                            <Text style={styles.personName}>{person.username}</Text>
+                            <Text style={styles.previewTime}>
+                              {preview ? formatTime(preview.createdAt) : ''}
+                            </Text>
+                          </View>
+                          <Text style={styles.personPreview} numberOfLines={1}>
+                            {preview ? preview.content : 'Tap to start chatting'}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              )
             )}
           </View>
         )}
