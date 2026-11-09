@@ -481,6 +481,123 @@ public class SessionService {
                 .withoutPadding()
                 .encodeToString(randomBytes);
     }
+@Transactional(readOnly = true)
+public User getUserForSession(UUID sessionId) {
+    UserSession session = sessionRepository.findById(sessionId)
+            .orElseThrow(() -> new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Session not found"
+            ));
+
+    return session.getUser();
+}
+    // Rotate a refresh token without creating a new device session.
+    @Transactional
+    public IssuedSession refreshSession(String rawRefreshToken) {
+
+        if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Refresh token is required"
+            );
+        }
+
+        String tokenHash = hashRefreshToken(rawRefreshToken);
+
+        UserSession session = sessionRepository
+                .findByRefreshTokenHash(tokenHash)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "Invalid refresh token"
+                ));
+
+        Instant now = Instant.now();
+
+        if (session.getStatus() != SessionStatus.ACTIVE) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Session is no longer active"
+            );
+        }
+
+        // A secondary session must still have a valid primary.
+        if (!session.isPrimary()) {
+            UUID primaryId = session.getPrimarySessionId();
+
+            if (primaryId == null) {
+                throw new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "Primary session reference is missing"
+                );
+            }
+
+            UserSession primary = sessionRepository.findById(primaryId)
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.UNAUTHORIZED,
+                            "Primary session is unavailable"
+                    ));
+
+            if (!primary.isPrimary()
+                    || !primary.getUser().getId().equals(
+                            session.getUser().getId()
+                    )
+                    || primary.getStatus() != SessionStatus.ACTIVE
+                    || isInactive(primary, now)) {
+
+                throw new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "Primary session is no longer active"
+                );
+            }
+        }
+
+        if (isInactive(session, now)) {
+            if (session.isPrimary()) {
+                expirePrimaryAndSuspendChildren(session, now);
+            } else {
+                expireSession(
+                        session,
+                        now,
+                        "Device inactive for 14 days"
+                );
+            }
+
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Session has expired due to inactivity"
+            );
+        }
+
+        String newRefreshToken = generateRefreshToken();
+
+        session.setRefreshTokenHash(
+                hashRefreshToken(newRefreshToken)
+        );
+        session.setLastActiveAt(now);
+
+        UserSession saved = sessionRepository.save(session);
+
+        return new IssuedSession(
+                saved.getSessionId(),
+                newRefreshToken,
+                saved.getStatus(),
+                now
+        );
+    }
+
+    @Transactional
+    public RefreshedSession refreshWithUser(String rawRefreshToken) {
+        IssuedSession issued = refreshSession(rawRefreshToken);
+        User user = getUserForSession(issued.sessionId());
+
+        return new RefreshedSession(user, issued);
+    }
+
+    public record RefreshedSession(
+            User user,
+            IssuedSession session
+    ) {
+    }
 
     private String hashRefreshToken(String refreshToken) {
         try {

@@ -40,7 +40,6 @@ public class AuthController {
     public AuthResponse register(
             @Valid @RequestBody RegisterRequest request
     ) {
-
         if (userService.emailExists(request.getEmail())) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
@@ -70,7 +69,6 @@ public class AuthController {
                     required = false
             ) String deviceName
     ) {
-
         Optional<User> userOptional =
                 userService.authenticate(
                         request.getEmail(),
@@ -91,14 +89,12 @@ public class AuthController {
                         ? "Android device"
                         : deviceName.trim();
 
-        // Create the primary device session.
         SessionService.IssuedSession session =
                 sessionService.createPrimarySession(
                         user,
                         finalDeviceName
                 );
 
-        // Generate a JWT containing the session UUID.
         String token = jwtService.generateToken(
                 user.getEmail(),
                 user.getId(),
@@ -114,5 +110,55 @@ public class AuthController {
                 session.refreshToken(),
                 session.status().name()
         );
+    }
+
+    @PostMapping("/refresh")
+    public LoginResponse refresh(
+            @RequestBody RefreshRequest request
+    ) {
+        if (request == null || request.getRefreshToken() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Refresh token is required"
+            );
+        }
+
+
+SessionService.RefreshedSession refreshed =
+        sessionService.refreshWithUser(
+                request.getRefreshToken()
+        );
+
+SessionService.IssuedSession session = refreshed.session();
+User user = refreshed.user();
+
+
+        String token = jwtService.generateToken(
+                user.getEmail(),
+                user.getId(),
+                session.sessionId()
+        );
+
+        return new LoginResponse(
+                user.getId(),
+                user.getUsername(),
+                user.getEmail(),
+                token,
+                session.sessionId(),
+                session.refreshToken(),
+                session.status().name()
+        );
+    }
+
+    public static class RefreshRequest {
+        private String refreshToken;
+
+        public String getRefreshToken() {
+            return refreshToken;
+        }
+
+        public void setRefreshToken(String refreshToken) {
+            this.refreshToken = refreshToken;
+        }
     }
 }

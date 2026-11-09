@@ -65,7 +65,8 @@ public class SecurityConfig {
         "/",
         "/api/hello",
         "/api/auth/register",
-        "/api/auth/login"
+        "/api/auth/login",
+        "/api/auth/refresh"
 ).permitAll()
 
                 // Phone B can create a pairing request.
