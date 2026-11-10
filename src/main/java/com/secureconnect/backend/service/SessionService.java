@@ -35,40 +35,50 @@ public class SessionService {
     }
 
     // Create the first active primary device session.
-    @Transactional
-    public IssuedSession createPrimarySession(
-            User user,
-            String deviceName
-    ) {
-        Instant now = Instant.now();
+    
+// Create a primary session after successful password authentication.
+// Replace an existing primary session instead of blocking login.
+@Transactional
+public IssuedSession createPrimarySession(
+        User user,
+        String deviceName
+) {
+    Instant now = Instant.now();
 
-        var existingPrimary =
-                sessionRepository.findFirstByUser_IdAndPrimaryTrueAndStatus(
-                        user.getId(),
-                        SessionStatus.ACTIVE
-                );
+    var existingPrimary =
+            sessionRepository.findFirstByUser_IdAndPrimaryTrueAndStatus(
+                    user.getId(),
+                    SessionStatus.ACTIVE
+            );
 
-        if (existingPrimary.isPresent()) {
-            UserSession primary = existingPrimary.get();
+    if (existingPrimary.isPresent()) {
+        UserSession primary = existingPrimary.get();
 
-            if (isInactive(primary, now)) {
-                expirePrimaryAndSuspendChildren(primary, now);
-            } else {
-                throw new ResponseStatusException(
-                        HttpStatus.CONFLICT,
-                        "An active primary device already exists. Link this device instead."
-                );
-            }
-        }
+        primary.setStatus(SessionStatus.REVOKED);
+        primary.setRevokedAt(now);
+        primary.setRevocationReason(
+                "Primary session replaced by a new login"
+        );
 
-        return createSession(
-                user,
-                deviceName,
-                true,
-                null,
-                SessionStatus.ACTIVE
+        sessionRepository.save(primary);
+
+        // Existing secondary sessions depend on the old primary.
+        suspendChildren(
+                primary,
+                now,
+                "Primary session replaced by a new login"
         );
     }
+
+    return createSession(
+            user,
+            deviceName,
+            true,
+            null,
+            SessionStatus.ACTIVE
+    );
+}
+
 
     // Create a pending secondary session.
     // Retained for compatibility with the existing session system.
