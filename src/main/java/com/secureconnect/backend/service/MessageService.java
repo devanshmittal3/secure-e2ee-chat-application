@@ -88,6 +88,25 @@ public class MessageService {
         return toResponse(savedMessage);
     }
 
+    /** Stores an opaque client-side encrypted envelope. The server never decrypts it. */
+    public MessageResponse sendEncryptedMessage(Long conversationId, String email, String encryptedPayload) {
+        if (encryptedPayload == null || encryptedPayload.isBlank() || encryptedPayload.length() > 100_000) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Encrypted payload is empty or too large");
+        }
+        if (!encryptedPayload.startsWith("SC_E2EE_V1:")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported encrypted message envelope");
+        }
+        User sender = userRepository.findByEmail(email).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authenticated user not found"));
+        Conversation conversation = conversationRepository.findById(conversationId).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation not found"));
+        if (!conversationMemberRepository.existsByConversationIdAndUserId(conversationId, sender.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a member of this conversation");
+        }
+        Message saved = messageRepository.save(new Message(conversation, sender, encryptedPayload, LocalDateTime.now()));
+        return toResponse(saved);
+    }
+
     public List<MessageResponse> getMessagesByConversation(
             Long conversationId,
             String email

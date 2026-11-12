@@ -21,6 +21,10 @@ public interface UserSessionRepository
             Long userId
     );
 
+    List<UserSession> findAllByUser_IdInAndStatus(
+            List<Long> userIds, SessionStatus status
+    );
+
     Optional<UserSession> findBySessionIdAndUser_Id(
             UUID sessionId,
             Long userId

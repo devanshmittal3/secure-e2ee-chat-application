@@ -2,6 +2,7 @@
 package com.secureconnect.backend.controller;
 
 import com.secureconnect.backend.dto.MessageResponse;
+import com.secureconnect.backend.dto.EncryptedMessageRequest;
 import com.secureconnect.backend.service.MessageService;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -29,6 +30,19 @@ public class MessageController {
                 authentication.getName(),
                 content
         );
+    }
+
+    @PostMapping("/encrypted")
+    public MessageResponse sendEncryptedMessage(
+            @RequestBody EncryptedMessageRequest request,
+            Authentication authentication
+    ) {
+        if (request == null || request.conversationId() == null) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST, "conversationId is required");
+        }
+        return messageService.sendEncryptedMessage(
+                request.conversationId(), authentication.getName(), request.encryptedPayload());
     }
 
     @GetMapping("/conversation/{conversationId}")

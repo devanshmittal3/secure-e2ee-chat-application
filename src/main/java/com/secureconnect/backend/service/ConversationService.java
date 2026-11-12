@@ -166,9 +166,8 @@ public class ConversationService {
                     conversationId,
                     otherMember.getUser().getId(),
                     otherMember.getUser().getUsername(),
-                    visibleLatest == null
-                            ? null
-                            : visibleLatest.getContent(),
+                    null, // Never expose message content in conversation-list previews.
+
                     visibleLatest == null
                             ? null
                             : visibleLatest.getCreatedAt(),
