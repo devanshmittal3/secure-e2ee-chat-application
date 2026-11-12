@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
+import { ensureLocalCryptoIdentity, encryptChatMessage, decryptChatMessages } from './src/crypto/e2ee';
 import {
   SafeAreaView,
   View,
@@ -92,6 +93,7 @@ type Message = {
   senderUsername: string;
   content: string;
   createdAt: string;
+  encryptionStatus?: 'encrypted' | 'legacy' | 'unavailable';
 };
 
 type LastMessagePreview = {
@@ -281,7 +283,10 @@ export default function App() {
         },
       );
       const data = await readResponse<Message[]>(response);
-      const loadedMessages = Array.isArray(data) ? data : [];
+      const rawMessages = Array.isArray(data) ? data : [];
+      if (!sessionId) throw new Error('This device session is missing. Please sign in again.');
+      await ensureLocalCryptoIdentity(jwt || token || '', sessionId);
+      const loadedMessages = await decryptChatMessages(rawMessages, sessionId);
       setMessages(loadedMessages);
 
       if (selectedUser && loadedMessages.length > 0) {
@@ -359,6 +364,20 @@ export default function App() {
     // Restore once when the app opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!token || !sessionId) return;
+    let active = true;
+    void ensureLocalCryptoIdentity(token, sessionId).catch((error) => {
+      if (active) {
+        Alert.alert(
+          'Secure messaging setup failed',
+          error instanceof Error ? error.message : 'Could not register this device encryption key.',
+        );
+      }
+    });
+    return () => { active = false; };
+  }, [token, sessionId]);
 
   useEffect(() => {
     if (token && loggedInUser) {
@@ -659,7 +678,10 @@ export default function App() {
         },
       );
       const data = await readResponse<Message[]>(messagesResponse);
-      const loadedMessages = Array.isArray(data) ? data : [];
+      const rawMessages = Array.isArray(data) ? data : [];
+      if (!sessionId) throw new Error('This device session is missing. Please sign in again.');
+      await ensureLocalCryptoIdentity(token, sessionId);
+      const loadedMessages = await decryptChatMessages(rawMessages, sessionId);
       setMessages(loadedMessages);
 
       if (loadedMessages.length > 0) {
@@ -698,15 +720,26 @@ export default function App() {
 
     setSending(true);
     try {
-      const url =
-        `${API_BASE_URL}/api/messages?conversationId=${activeConversation.id}` +
-        `&content=${encodeURIComponent(cleanMessage)}`;
-
-      const response = await fetch(url, {
+      if (!sessionId) throw new Error('This device session is missing. Please sign in again.');
+      await ensureLocalCryptoIdentity(token, sessionId);
+      if (!loggedInUser?.id) throw new Error('Your account ID is unavailable. Sign in again.');
+      const encryptedPayload = await encryptChatMessage(
+        cleanMessage,
+        activeConversation.id,
+        token,
+        sessionId,
+        loggedInUser.id,
+      );
+      const response = await fetch(`${API_BASE_URL}/api/messages/encrypted`, {
         method: 'POST',
         headers: apiHeaders(token),
+        body: JSON.stringify({
+          conversationId: activeConversation.id,
+          encryptedPayload,
+        }),
       });
-      const sentMessage = await readResponse<Message>(response);
+      const storedMessage = await readResponse<Message>(response);
+      const [sentMessage] = await decryptChatMessages([storedMessage], sessionId);
       setMessages((current) => [...current, sentMessage]);
       setLastMessageByUser((current) => ({
         ...current,
@@ -791,7 +824,10 @@ export default function App() {
   { method: 'GET', headers: apiHeaders(token) },
 );
       const data = await readResponse<Message[]>(response);
-      const loadedMessages = Array.isArray(data) ? data : [];
+      const rawMessages = Array.isArray(data) ? data : [];
+      if (!sessionId) throw new Error('This device session is missing. Please sign in again.');
+      await ensureLocalCryptoIdentity(token, sessionId);
+      const loadedMessages = await decryptChatMessages(rawMessages, sessionId);
       setMessages(loadedMessages);
     } catch (error) {
       setSelectedUser(null);
@@ -882,6 +918,12 @@ export default function App() {
                       <Text style={styles.messageSender}>
                         {message.senderUsername}
                       </Text>
+                    )}
+                    {message.encryptionStatus === 'legacy' && (
+                      <Text style={styles.messageSender}>Legacy message · not end-to-end encrypted</Text>
+                    )}
+                    {message.encryptionStatus === 'unavailable' && (
+                      <Text style={styles.messageSender}>This device does not have the decryption key</Text>
                     )}
                     <Text style={styles.messageText}>{message.content}</Text>
                     <Text style={styles.messageTime}>
